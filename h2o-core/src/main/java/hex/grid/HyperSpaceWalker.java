@@ -11,8 +11,10 @@ import hex.grid.HyperSpaceSearchCriteria.Strategy;
 import water.exceptions.H2OIllegalArgumentException;
 import water.util.PojoUtils;
 
+import java.lang.reflect.Array;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import static java.lang.StrictMath.min;
 
@@ -226,10 +228,11 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
     protected MP getModelParams(MP params, Object[] hyperParams) {
       ModelParametersBuilderFactory.ModelParametersBuilder<MP>
               paramsBuilder = _paramsBuilderFactory.get(params);
+      
       for (int i = 0; i < _hyperParamNames.length; i++) {
         String paramName = _hyperParamNames[i];
         Object paramValue = hyperParams[i];
-
+        
         if (paramName.equals("valid")) {  // change paramValue to key<Frame> for validation_frame
           paramName = "validation_frame";   // @#$, paramsSchema is still using validation_frame and training_frame
         }
@@ -499,17 +502,47 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
          */
         private int[] nextModelIndices() {
           int[] hyperparamIndices =  new int[_hyperParamNames.length];
-
+          Set<String> gam_specific_params = new HashSet<>(Arrays.asList("bs", "scale", "num_knots"));
+          int gam_columns_index = -1;
+          int gam_columns_length = 0;
+          if(_hyperParams.get("gam_columns") != null) {
+            gam_columns_index = _random.nextInt(_hyperParams.get("gam_columns").length);
+            gam_columns_length = ((ArrayList<String>)(_hyperParams.get("gam_columns"))[gam_columns_index]).size();
+          }
+          
           do {
             // generate random indices
             for (int i = 0; i < _hyperParamNames.length; i++) {
-              hyperparamIndices[i] = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);
+              if(_hyperParamNames[i].equals("gam_columns")) {
+                hyperparamIndices[i] = gam_columns_index;
+              } else if(gam_columns_index != -1 && gam_columns_length != 0 && gam_specific_params.contains(_hyperParamNames[i])) {
+                hyperparamIndices[i] = nextGAMParamIndex(gam_columns_length, _hyperParamNames[i], _hyperParams.get(_hyperParamNames[i]));
+              } else {
+                hyperparamIndices[i] = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);  
+              }
             }
             // check for aliases and loop if we've visited this combo before
           } while (_visitedPermutationHashes.contains(integerHash(hyperparamIndices)));
 
           return hyperparamIndices;
         } // nextModel
+
+        /**
+         * Returns random index in the hyperspace of the GAM-specific
+         * hyperparameter, param, subject to the constraint that the length of
+         * the random array chosen is equal to gam_columns_length, the length
+         * of the random gam_columns array chosen.
+         * 
+         * @param gam_columns_length
+         * @param param
+         * @param param_values
+         * @return
+         */
+        private int nextGAMParamIndex(int gam_columns_length, String param, Object[] param_values) {
+          int[] filtered_param_indices = IntStream.range(0, _hyperParams.get(param).length)
+                  .filter(i -> ((ArrayList<Integer>)(param_values[i])).size() == gam_columns_length).toArray();
+          return filtered_param_indices[_random.nextInt(filtered_param_indices.length)];
+        }
 
       }; // anonymous HyperSpaceIterator class
     } // iterator()
