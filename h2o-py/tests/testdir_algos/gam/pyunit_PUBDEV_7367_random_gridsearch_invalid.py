@@ -17,7 +17,7 @@ class test_random_gam_gridsearch_invalid:
     myX = []
     myY = []
     h2o_model = []
-    search_criteria = {'strategy': 'RandomDiscrete', "max_models": 8, "seed": 1}
+    search_criteria = {'strategy': 'RandomDiscrete', "max_models": 12, "seed": 1}
     hyper_parameters = {'scale': [[1, 1], [2, 2]], 'gam_columns': [["C11", "C12"], ["C12", "C13"]], 'lambda': [-1, 0, 0.01]}
     manual_gam_models = []
     num_grid_models = 0
@@ -37,14 +37,14 @@ class test_random_gam_gridsearch_invalid:
         self.h2o_data["C2"] = self.h2o_data["C2"].asfactor()
         self.myX = ["C1", "C2"]
         self.myY = "C21"
-        # for scale in self.hyper_parameters['scale']:
-        #     for gam_columns in self.hyper_parameters['gam_columns']:
-        #         for lambda_ in self.hyper_parameters['lambda']:
-        #             if lambda_ == -1:
-        #                 continue
-        #             self.manual_gam_models.append(H2OGeneralizedAdditiveEstimator(family="gaussian", gam_columns=gam_columns,
-        #                                                                           keep_gam_cols=True, scale=scale, lambda_=lambda_,
-        #                                                                           ))
+        for scale in self.hyper_parameters['scale']:
+            for gam_columns in self.hyper_parameters['gam_columns']:
+                for lambda_ in self.hyper_parameters['lambda']:
+                    if lambda_ == -1:
+                        continue
+                    self.manual_gam_models.append(H2OGeneralizedAdditiveEstimator(family="gaussian", gam_columns=gam_columns,
+                                                                                  keep_gam_cols=True, scale=scale, lambda_=lambda_,
+                                                                                  ))
 
     def train_models(self):
         self.h2o_model = H2OGridSearch(H2OGeneralizedAdditiveEstimator(family="gaussian",
@@ -57,15 +57,18 @@ class test_random_gam_gridsearch_invalid:
     def match_models(self):
         for model in self.manual_gam_models:
             assert model.actual_params['lambda'] != -1, "Incorrect lambda value in grid search"
-        #     for grid_search_model in self.h2o_model.models:
-        #         if grid_search_model.actual_params['gam_columns'] == gam_columns \
-        #             and grid_search_model.actual_params['scale'] == scale \
-        #             and grid_search_model.actual_params['lambda'] == lambda_:
-        #             self.num_grid_models += 1
-        #             assert grid_search_model.coef() == model.coef(), "coefficients should be equal"
-        #             break
-        # 
-        # assert self.num_grid_models == self.num_expected_models, "Grid search model parameters incorrect or incorrect number of models generated"
+            gam_columns = model.actual_params['gam_columns']
+            scale = model.actual_params['scale']
+            lambda_ = model.actual_params['lambda']
+            for grid_search_model in self.h2o_model.models:
+                if grid_search_model.actual_params['gam_columns'] == gam_columns \
+                    and grid_search_model.actual_params['scale'] == scale \
+                    and grid_search_model.actual_params['lambda'] == lambda_:
+                    self.num_grid_models += 1
+                    assert grid_search_model.coef() == model.coef(), "coefficients should be equal"
+                    break
+
+        assert self.num_grid_models == self.num_expected_models, "Grid search model parameters incorrect or incorrect number of models generated"
 
 def test_gridsearch():
     test_gam_grid = test_random_gam_gridsearch_invalid()
@@ -73,8 +76,6 @@ def test_gridsearch():
     test_gam_grid.match_models()
 
 if __name__ == "__main__":
-    #h2o.init(ip='10.181.140.129', port=54321, strict_version_check=False)
     pyunit_utils.standalone_test(test_gridsearch)
 else:
-    #h2o.init(ip='10.181.140.129', port=54321, strict_version_check=False)
     test_gridsearch()
