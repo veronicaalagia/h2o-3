@@ -505,12 +505,12 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
           Set<String> gam_specific_params = new HashSet<>(Arrays.asList("bs", "scale", "num_knots"));
           int gam_columns_index = -1;
           int gam_columns_length = 0;
-          if(_hyperParams.get("gam_columns") != null) {
-            gam_columns_index = _random.nextInt(_hyperParams.get("gam_columns").length);
-            gam_columns_length = ((ArrayList<String>)(_hyperParams.get("gam_columns"))[gam_columns_index]).size();
-          }
           
           do {
+            if(_hyperParams.get("gam_columns") != null) {
+              gam_columns_index = _random.nextInt(_hyperParams.get("gam_columns").length);
+              gam_columns_length = ((ArrayList<String>)(_hyperParams.get("gam_columns"))[gam_columns_index]).size();
+            }
             // generate random indices
             for (int i = 0; i < _hyperParamNames.length; i++) {
               if(_hyperParamNames[i].equals("gam_columns")) {
@@ -521,6 +521,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
                 hyperparamIndices[i] = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);  
               }
             }
+            // Log.info(“scale_” + scale + ”, num_knots:”+numknots);
             // check for aliases and loop if we've visited this combo before
           } while (_visitedPermutationHashes.contains(integerHash(hyperparamIndices)));
 
