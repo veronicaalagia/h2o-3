@@ -228,11 +228,9 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
     protected MP getModelParams(MP params, Object[] hyperParams) {
       ModelParametersBuilderFactory.ModelParametersBuilder<MP>
               paramsBuilder = _paramsBuilderFactory.get(params);
-      
       for (int i = 0; i < _hyperParamNames.length; i++) {
         String paramName = _hyperParamNames[i];
         Object paramValue = hyperParams[i];
-        
         if (paramName.equals("valid")) {  // change paramValue to key<Frame> for validation_frame
           paramName = "validation_frame";   // @#$, paramsSchema is still using validation_frame and training_frame
         }
@@ -521,7 +519,6 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
                 hyperparamIndices[i] = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);  
               }
             }
-            // Log.info(“scale_” + scale + ”, num_knots:”+numknots);
             // check for aliases and loop if we've visited this combo before
           } while (_visitedPermutationHashes.contains(integerHash(hyperparamIndices)));
 
