@@ -140,14 +140,16 @@ public class GridSearchHandler<G extends Grid<MP>,
           break;
         }
       }
-      if (fieldMetadata == null) {
-        throw new H2OIllegalArgumentException(hparam.getKey(), "grid",
-                                              "Unknown hyper parameter for grid search!");
-      }
-      if (!fieldMetadata.is_gridable) {
-        throw new H2OIllegalArgumentException(hparam.getKey(), "grid",
-                                              "Illegal hyper parameter for grid search! The parameter '"
-                                              + fieldMetadata.name + " is not gridable!");
+      if (!hparam.getKey().equals("grouped_parameters")) { // skip check for grouped_parameters, not used in grid
+        if (fieldMetadata == null) {
+          throw new H2OIllegalArgumentException(hparam.getKey(), "grid",
+                  "Unknown hyper parameter for grid search!");
+        }
+        if (!fieldMetadata.is_gridable) {
+          throw new H2OIllegalArgumentException(hparam.getKey(), "grid",
+                  "Illegal hyper parameter for grid search! The parameter '"
+                          + fieldMetadata.name + " is not gridable!");
+        }
       }
     }
   }

@@ -6,15 +6,12 @@ import hex.ScoreKeeper;
 import hex.ScoringInfo;
 import hex.grid.HyperSpaceSearchCriteria.CartesianSearchCriteria;
 import hex.grid.HyperSpaceSearchCriteria.RandomDiscreteValueSearchCriteria;
-import hex.grid.HyperSpaceSearchCriteria.SequentialSearchCriteria;
 import hex.grid.HyperSpaceSearchCriteria.Strategy;
 import water.exceptions.H2OIllegalArgumentException;
 import water.util.PojoUtils;
 
 import java.util.*;
 import java.util.function.Consumer;
-
-import static java.lang.StrictMath.min;
 
 public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSpaceSearchCriteria> {
 
@@ -239,11 +236,17 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
       return paramsBuilder.build();
     }
 
+    // todo: Karthik, you need to fix this if there are grouped_parameters in the hyper_parameter.  It should not
+    //  be part of the grid and should not contribute to any new model.  However, you do need to use it to determine the
+    //  number of legal models you can build.  Ummm, you are
+    //  welcome.  Wendy
     protected long computeMaxSizeOfHyperSpace() {
       long work = 1;
       for (Map.Entry<String, Object[]> p : _hyperParams.entrySet()) {
-        if (p.getValue() != null) {
-          work *= p.getValue().length;
+        if (!p.getKey().equals("grouped_parameters")) {
+          if (p.getValue() != null) { // todo: Karthik, you need to fix this if grouped_parameters is not null
+            work *= p.getValue().length;
+          }
         }
       }
       return work;
@@ -269,40 +272,42 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
       // if a parameter is specified in both model parameter and hyper-parameter, this is only allowed if the
       // parameter value is set to be default.  Otherwise, an exception will be thrown.
       for (String key : _hyperParams.keySet()) {
-        // Throw if the user passed an empty value list:
-        Object[] values = _hyperParams.get(key);
-        if (0 == values.length)
-          throw new H2OIllegalArgumentException("Grid search hyperparameter value list is empty for hyperparameter: " + key);
+        if (!key.equals("grouped_parameters")) {
+          // Throw if the user passed an empty value list:
+          Object[] values = _hyperParams.get(key);
+          if (0 == values.length)
+            throw new H2OIllegalArgumentException("Grid search hyperparameter value list is empty for hyperparameter: " + key);
 
-        if ("seed".equals(key) || "_seed".equals(key)) continue;  // initialized to the wall clock
+          if ("seed".equals(key) || "_seed".equals(key)) continue;  // initialized to the wall clock
 
-        // Ugh.  Java callers, like the JUnits or Sparkling Water users, use a leading _.  REST users don't.
-        String prefix = (key.startsWith("_") ? "" : "_");
+          // Ugh.  Java callers, like the JUnits or Sparkling Water users, use a leading _.  REST users don't.
+          String prefix = (key.startsWith("_") ? "" : "_");
 
-        // Throw if params has a non-default value which is not in the hyperParams map
-        Object defaultVal = PojoUtils.getFieldValue(_defaultParams, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
-        Object actualVal = PojoUtils.getFieldValue(_params, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
+          // Throw if params has a non-default value which is not in the hyperParams map
+          Object defaultVal = PojoUtils.getFieldValue(_defaultParams, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
+          Object actualVal = PojoUtils.getFieldValue(_params, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
 
-        if (defaultVal != null && actualVal != null) {
-          // both are not set to null
-          if (defaultVal.getClass().isArray() &&
-                  // array
-                  !PojoUtils.arraysEquals(defaultVal, actualVal)) {
+          if (defaultVal != null && actualVal != null) {
+            // both are not set to null
+            if (defaultVal.getClass().isArray() &&
+                    // array
+                    !PojoUtils.arraysEquals(defaultVal, actualVal)) {
+              throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
+            } // array
+            if (!defaultVal.getClass().isArray() &&
+                    // ! array
+                    !defaultVal.equals(actualVal)) {
+              throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
+            } // ! array
+          } // both are set: defaultVal != null && actualVal != null
+
+          // defaultVal is null but actualVal is not, raise exception
+          if (defaultVal == null && !(actualVal == null)) {
+            // only actual is set
             throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
-          } // array
-          if (!defaultVal.getClass().isArray() &&
-                  // ! array
-                  !defaultVal.equals(actualVal)) {
-            throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
-          } // ! array
-        } // both are set: defaultVal != null && actualVal != null
-
-        // defaultVal is null but actualVal is not, raise exception
-        if (defaultVal == null && !(actualVal == null)) {
-          // only actual is set
-          throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
-        }
-      } // for all keys
+          }
+        } // for all keys
+      }
     }
   }
 
@@ -370,6 +375,9 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
          * the entire space has been traversed.
          */
         private int[] nextModelIndices(int[] hyperparamIndices) {
+          // todo: Karthik, if grouped_parameters is in the _hyperParamNames, you need make sure not to use it
+          // todo: in the hyperspace search.  However, you also need to make sure the correct parameter combinations
+          // todo:  are chosen.  Make sure the right sizes arrays are chosen in the grouped_parameters
           // Find the next parm to flip
           int i;
           for (i = 0; i < hyperparamIndices.length; i++) {
@@ -498,6 +506,9 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
          * criteria.
          */
         private int[] nextModelIndices() {
+          //todo: Karthik, you need to change this up if grouped_parameters are found in
+          // todo: _hyperParameters.  If it is not found, everything will go as before.  You will
+          // todo: always look for it at the beginning.  If found, do your magic.  If not, do as before.
           int[] hyperparamIndices =  new int[_hyperParamNames.length];
 
           do {
