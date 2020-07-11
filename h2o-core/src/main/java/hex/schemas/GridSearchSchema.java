@@ -11,10 +11,9 @@ import water.api.schemas3.ModelParametersSchemaV3;
 import water.api.schemas3.SchemaV3;
 import water.exceptions.H2OIllegalArgumentException;
 import water.util.IcedHashMap;
+import water.util.JSONUtils;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 /**
  * This is a common grid search schema composed of two parameters: default parameters for a builder
@@ -66,7 +65,7 @@ public class GridSearchSchema<G extends Grid<MP>,
     if( parms.containsKey("hyper_parameters") ) {
       Map<String, Object> m;
       try {
-        m = water.util.JSONUtils.parse(parms.getProperty("hyper_parameters"));
+        m = JSONUtils.parse(parms.getProperty("hyper_parameters"));
 
         // Convert lists and singletons into arrays
         for (Map.Entry<String, Object> e : m.entrySet()) {
@@ -84,32 +83,45 @@ public class GridSearchSchema<G extends Grid<MP>,
     }
 
     if( parms.containsKey("search_criteria") ) {
+      Map<String, Object> m;
       Properties p;
       try {
-        p = water.util.JSONUtils.parseToProperties(parms.getProperty("search_criteria"));
+        m = JSONUtils.parse(parms.getProperty("search_criteria"));
+        //p = water.util.JSONUtils.parseToProperties(parms.getProperty("search_criteria"));
 
-        if (! p.containsKey("strategy")) {
+        if (! m.containsKey("strategy")) {
           throw new H2OIllegalArgumentException("search_criteria.strategy", "null");
         }
 
         // TODO: move this into a factory method in HyperSpaceSearchCriteriaV99
-        String strategy = (String)p.get("strategy");
+        String strategy = (String)m.get("strategy");
         if ("Cartesian".equals(strategy)) {
           search_criteria = new HyperSpaceSearchCriteriaV99.CartesianSearchCriteriaV99();
         } else if ("RandomDiscrete".equals(strategy)) {
           search_criteria = new HyperSpaceSearchCriteriaV99.RandomDiscreteValueSearchCriteriaV99();
-          if (p.containsKey("max_runtime_secs") && Double.parseDouble((String) p.get("max_runtime_secs"))<0) {
+          if (m.containsKey("max_runtime_secs") && (Double)m.get("max_runtime_secs")<0) {
             throw new H2OIllegalArgumentException("max_runtime_secs must be >= 0 (0 for unlimited time)", strategy);
           }
-          if (p.containsKey("max_models") && Integer.parseInt((String) p.get("max_models"))<0) {
+          if (m.containsKey("max_models") && (Double)m.get("max_models")<0) {
             throw new H2OIllegalArgumentException("max_models must be >= 0 (0 for all models)", strategy);
           }
         } else {
           throw new H2OIllegalArgumentException("search_criteria.strategy", strategy);
         }
-
+        
+        String[] grouped_parameters = null;
+        if(m.containsKey("grouped_parameters")) {
+          Object[] grouped_parameters_objects = ((List) m.get("grouped_parameters")).toArray();
+          grouped_parameters = Arrays.copyOf(grouped_parameters_objects, grouped_parameters_objects.length, String[].class);
+          m.remove("grouped_parameters");
+        }
+        
+        Properties properties = new Properties();
+        properties.putAll(m);
+        
         search_criteria.fillWithDefaults();
-        search_criteria.fillFromParms(p);
+        search_criteria.fillFromParms(properties);
+        search_criteria.grouped_parameters = grouped_parameters;
       }
       catch (Exception e) {
         // usually JsonSyntaxException, but can also be things like IllegalStateException or NumberFormatException

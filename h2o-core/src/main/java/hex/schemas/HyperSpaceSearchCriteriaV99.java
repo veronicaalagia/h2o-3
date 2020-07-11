@@ -19,6 +19,9 @@ public class HyperSpaceSearchCriteriaV99<I extends HyperSpaceSearchCriteria, S e
   @API(help = "Hyperparameter space search strategy.", required = true, valuesProvider = StrategyValuesProvider.class, direction = API.Direction.INOUT)
   public HyperSpaceSearchCriteria.Strategy strategy;
 
+  @API(help = "Grouped Parameters", required = false, direction = API.Direction.INOUT)
+  public String[] grouped_parameters;
+
 // TODO: add a factory which accepts a Strategy and calls the right constructor
 
   /**

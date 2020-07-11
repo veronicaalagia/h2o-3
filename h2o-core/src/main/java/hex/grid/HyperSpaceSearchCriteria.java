@@ -58,6 +58,9 @@ public class HyperSpaceSearchCriteria extends Iced {
 
   public final Strategy _strategy;
   public final Strategy strategy() { return _strategy; }
+  
+  public String[] _grouped_parameters;
+  public String[] getGroupedParameters() { return _grouped_parameters; }
 
   public StoppingCriteria stoppingCriteria() { return null; }
 

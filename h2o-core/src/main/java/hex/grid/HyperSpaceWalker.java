@@ -11,7 +11,6 @@ import hex.grid.HyperSpaceSearchCriteria.Strategy;
 import water.exceptions.H2OIllegalArgumentException;
 import water.util.PojoUtils;
 
-import java.lang.reflect.Array;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -193,9 +192,9 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
       _hyperParams = hyperParams;
       _paramsBuilderFactory = paramsBuilderFactory;
       _hyperParamNames = hyperParams.keySet().toArray(new String[0]);
-      _maxHyperSpaceSize = computeMaxSizeOfHyperSpace();
       _search_criteria = search_criteria;
-
+      _maxHyperSpaceSize = computeMaxSizeOfHyperSpace();
+      
       // Sanity check the hyperParams map, and check it against the params object
       try {
         _defaultParams = (MP) params.getClass().newInstance();
@@ -241,15 +240,60 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
     }
 
     protected long computeMaxSizeOfHyperSpace() {
-      long work = 1;
-      for (Map.Entry<String, Object[]> p : _hyperParams.entrySet()) {
-        if (p.getValue() != null) {
-          work *= p.getValue().length;
+      long work = 0;
+      long non_grouped_params_combos = 1;
+      
+      // Create hashmap of number of combinations for each array length of grouped parameters
+      Set<String> grouped_params = _search_criteria._grouped_parameters != null ?
+              new HashSet<>(Arrays.asList(_search_criteria._grouped_parameters)) : null;
+      Map<Integer, Integer> grouped_param_arrlens = null;
+      if(grouped_params != null) {
+        for (String param: grouped_params) {
+          Map<Integer, Integer> param_arrlen_frequencies = new HashMap<>();
+          if(_hyperParams.get(param) != null) {
+            for (Object param_vals: _hyperParams.get(param)) {
+              int param_arrlen = ((ArrayList) param_vals).toArray().length;
+              if(param_arrlen_frequencies.get(param_arrlen) != null) {
+                param_arrlen_frequencies.put(param_arrlen, param_arrlen_frequencies.get(param_arrlen) + 1);
+              } else {
+                param_arrlen_frequencies.put(param_arrlen, 1);
+              }
+            }
+            grouped_param_arrlens = multiplyHashMaps(grouped_param_arrlens, param_arrlen_frequencies);
+          }
         }
       }
+      
+      // Get number of combinations for non grouped parameters
+      for (Map.Entry<String, Object[]> p : _hyperParams.entrySet()) {
+        if(grouped_params != null && grouped_params.contains(p.getKey())) { continue; } 
+        else {
+          if (p.getValue() != null) {
+            non_grouped_params_combos *= p.getValue().length;
+          }  
+        }
+      }
+      
+      for (Map.Entry<Integer, Integer> entry : grouped_param_arrlens.entrySet()) {
+        work += non_grouped_params_combos * entry.getValue();
+      }
+      
       return work;
     }
 
+    protected Map<Integer, Integer> multiplyHashMaps(Map<Integer, Integer> m1, Map<Integer, Integer> m2) {
+      if(m1 == null) { return m2; }
+      Map<Integer, Integer> m = new HashMap<>();
+      for(Map.Entry<Integer, Integer> entry : m1.entrySet()) {
+        if(m2.get(entry.getKey()) != null) {
+          m.put(entry.getKey(), entry.getValue() * m2.get(entry.getKey()));
+        } else {
+          m.put(entry.getKey(), 0);
+        }
+      }
+      return m;
+    }
+    
     /** Given a list of indices for the hyperparameter values return an Object[] of the actual values. */
     protected Object[] hypers(int[] hidx) {
       Object[] hypers = new Object[_hyperParamNames.length];
@@ -330,7 +374,16 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
 
         @Override
         public MP nextModelParameters(Model previousModel) {
-          _currentHyperparamIndices = _currentHyperparamIndices != null ? nextModelIndices(_currentHyperparamIndices) : new int[_hyperParamNames.length];
+
+          // First combination - all 0s, may not be valid, so we set
+          // first index to -1 and then call nextModelIndices to determine
+          // the first valid combination of indices
+          if (_currentHyperparamIndices == null) {
+            _currentHyperparamIndices = new int[_hyperParamNames.length];
+            _currentHyperparamIndices[0] = -1;
+          }
+          _currentHyperparamIndices = nextModelIndices(_currentHyperparamIndices);
+
           if (_currentHyperparamIndices != null) {
             // Fill array of hyper-values
             Object[] hypers = hypers(_currentHyperparamIndices);
@@ -347,16 +400,15 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
 
         @Override
         public boolean hasNext(Model previousModel) {
-          if (_currentHyperparamIndices == null) {
-            return true;
-          }
-          int[] hyperparamIndices = _currentHyperparamIndices;
-          for (int i = 0; i < hyperparamIndices.length; i++) {
-            if (hyperparamIndices[i] + 1 < _hyperParams.get(_hyperParamNames[i]).length) {
-              return true;
+          if (_currentHyperparamIndices != null) {
+            int[] hyperParamIndicesCopy = new int[_currentHyperparamIndices.length];
+            System.arraycopy(_currentHyperparamIndices, 0, hyperParamIndicesCopy, 0, _currentHyperparamIndices.length);
+            if (nextModelIndices(hyperParamIndicesCopy) == null) {
+              return false;
             }
           }
-          return false;
+          
+          return true;
         }
 
         @Override
@@ -385,7 +437,24 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
           for (int j = 0; j < i; j++) {
             hyperparamIndices[j] = 0;
           }
+          
           hyperparamIndices[i]++;
+          if(_search_criteria._grouped_parameters != null) {
+            int grouped_params_array_len = -1;
+            Set<String> grouped_params = new HashSet<>(Arrays.asList(_search_criteria._grouped_parameters));
+            for(int index = 0; index < hyperparamIndices.length; index++) {
+              if(grouped_params.contains(_hyperParamNames[index])) {
+                int param_index = hyperparamIndices[index];
+                int param_arrlen = ((ArrayList) _hyperParams.get(_hyperParamNames[index])[param_index]).toArray().length;
+                if(grouped_params_array_len != -1 && param_arrlen != grouped_params_array_len) {
+                   return nextModelIndices(hyperparamIndices);
+                } else {
+                  grouped_params_array_len = param_arrlen;
+                }
+              }
+            }
+          }
+          
           return hyperparamIndices;
         }
       }; // anonymous HyperSpaceIterator class
@@ -500,45 +569,46 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
          */
         private int[] nextModelIndices() {
           int[] hyperparamIndices =  new int[_hyperParamNames.length];
-          Set<String> gam_specific_params = new HashSet<>(Arrays.asList("bs", "scale", "num_knots"));
-          int gam_columns_index = -1;
-          int gam_columns_length = 0;
+          
+          Set<String> grouped_params = null;
+          int grouped_params_length = -1;
+          if(_search_criteria._grouped_parameters != null) {
+            grouped_params = new HashSet<>(Arrays.asList(_search_criteria._grouped_parameters));  
+          }
           
           do {
-            if(_hyperParams.get("gam_columns") != null) {
-              gam_columns_index = _random.nextInt(_hyperParams.get("gam_columns").length);
-              gam_columns_length = ((ArrayList<String>)(_hyperParams.get("gam_columns"))[gam_columns_index]).size();
-            }
-            // generate random indices
+            grouped_params_length = -1;
             for (int i = 0; i < _hyperParamNames.length; i++) {
-              if(_hyperParamNames[i].equals("gam_columns")) {
-                hyperparamIndices[i] = gam_columns_index;
-              } else if(gam_columns_index != -1 && gam_columns_length != 0 && gam_specific_params.contains(_hyperParamNames[i])) {
-                hyperparamIndices[i] = nextGAMParamIndex(gam_columns_length, _hyperParamNames[i], _hyperParams.get(_hyperParamNames[i]));
+              if(grouped_params != null && grouped_params.contains(_hyperParamNames[i]) && grouped_params_length == -1) {
+                int index = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);
+                grouped_params_length = ((ArrayList) _hyperParams.get(_hyperParamNames[i])[index]).toArray().length;
+                hyperparamIndices[i] = index;
+              } else if(grouped_params != null && grouped_params.contains(_hyperParamNames[i]) && grouped_params_length != -1) {
+                hyperparamIndices[i] = nextGroupedParamIndex(grouped_params_length, _hyperParamNames[i], _hyperParams.get(_hyperParamNames[i]));
               } else {
                 hyperparamIndices[i] = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);  
               }
             }
             // check for aliases and loop if we've visited this combo before
           } while (_visitedPermutationHashes.contains(integerHash(hyperparamIndices)));
-
+          
           return hyperparamIndices;
         } // nextModel
 
         /**
-         * Returns random index in the hyperspace of the GAM-specific
+         * Returns random index in the hyperspace of the grouped
          * hyperparameter, param, subject to the constraint that the length of
-         * the random array chosen is equal to gam_columns_length, the length
-         * of the random gam_columns array chosen.
+         * the random array chosen is equal to grouped_params_length, which is
+         * the length of the arrays of the other grouped parameters chosen.
          * 
-         * @param gam_columns_length
+         * @param grouped_params_length
          * @param param
          * @param param_values
          * @return
          */
-        private int nextGAMParamIndex(int gam_columns_length, String param, Object[] param_values) {
+        private int nextGroupedParamIndex(int grouped_params_length, String param, Object[] param_values) {
           int[] filtered_param_indices = IntStream.range(0, _hyperParams.get(param).length)
-                  .filter(i -> ((ArrayList<Integer>)(param_values[i])).size() == gam_columns_length).toArray();
+                  .filter(i -> ((ArrayList<Integer>)(param_values[i])).size() == grouped_params_length).toArray();
           return filtered_param_indices[_random.nextInt(filtered_param_indices.length)];
         }
 
