@@ -589,12 +589,16 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
                 hyperparamIndices[i] = index;
               } else if(grouped_params != null && grouped_params.contains(_hyperParamNames[i]) && grouped_params_length != -1) {
                 hyperparamIndices[i] = nextGroupedParamIndex(grouped_params_length, _hyperParamNames[i], _hyperParams.get(_hyperParamNames[i]));
+                if(hyperparamIndices[i] == -1) {
+                  break;
+                }
               } else {
                 hyperparamIndices[i] = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);  
               }
             }
             // check for aliases and loop if we've visited this combo before
-          } while (_visitedPermutationHashes.contains(integerHash(hyperparamIndices)));
+          } while (_visitedPermutationHashes.contains(integerHash(hyperparamIndices)) ||
+                  IntStream.of(hyperparamIndices).anyMatch(x -> x == -1));
           
           return hyperparamIndices;
         } // nextModel
@@ -613,6 +617,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
         private int nextGroupedParamIndex(int grouped_params_length, String param, Object[] param_values) {
           int[] filtered_param_indices = IntStream.range(0, _hyperParams.get(param).length)
                   .filter(i -> ((ArrayList<Integer>)(param_values[i])).size() == grouped_params_length).toArray();
+          if(filtered_param_indices.length == 0) { return -1; }
           return filtered_param_indices[_random.nextInt(filtered_param_indices.length)];
         }
 

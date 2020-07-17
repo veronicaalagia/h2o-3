@@ -21,13 +21,13 @@ class test_random_gam_gridsearch_grouped_invalid:
     myX = []
     myY = []
     h2o_model = []
-    search_criteria = {'strategy': 'RandomDiscrete', "max_models": 12, "seed": 1, "grouped_parameters": ['scale', 'gam_columns', 'num_knots']}
+    search_criteria = {'strategy': 'RandomDiscrete', "max_models": 8, "seed": 1, "grouped_parameters": ['scale', 'gam_columns', 'num_knots']}
     hyper_parameters = {'scale': [[1, 1, 1], [2, 2, 2], [1, 1], [2, 2]],
                         'gam_columns': [["C6", "C7", "C8"], ["C6", "C7"], ["C6"]],
                         'num_knots': [[5, 5, 5], [6, 6, 6], [5, 5], [6, 6], [5], [6]]}
     manual_gam_models = []
     num_grid_models = 0
-    num_expected_models = 12
+    num_expected_models = 8
 
     def __init__(self):
         self.setup_data()
