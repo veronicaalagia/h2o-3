@@ -9,7 +9,9 @@ from h2o.estimators.gam import H2OGeneralizedAdditiveEstimator
 from h2o.grid.grid_search import H2OGridSearch
 
 # In this test, we check to make sure that a grid search on a GAM works with GAM-specific parameters.
-# The test searches over 4 parameters, alpha, lambda, scale, and num_knots.
+# We specify grouped_parameters to ensure the hyperspace walker only chooses valid combinations
+# of the specified list of hyper parameters.
+# The test searches over 3 parameters, gam_columns, scale, and num_knots.
 # The test then compares the results of the grid search models with the models we created
 # by manually searching over the hyperspace.
 # If the coefficients do not match or an incorrect number of models is generated, the test throws an assertion error.
@@ -77,8 +79,6 @@ def test_gridsearch_specific():
     test_gam_grid.match_models()
 
 if __name__ == "__main__":
-    h2o.init(ip='192.168.1.5', port=54321, strict_version_check=False)
     pyunit_utils.standalone_test(test_gridsearch_specific)
 else:
-    h2o.init(ip='192.168.1.5', port=54321, strict_version_check=False)
     test_gridsearch_specific()

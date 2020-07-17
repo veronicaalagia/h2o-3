@@ -400,6 +400,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
 
         @Override
         public boolean hasNext(Model previousModel) {
+          // Checks to see that there is another valid combination of hyper parameters left in the hyperspace.
           if (_currentHyperparamIndices != null) {
             int[] hyperParamIndicesCopy = new int[_currentHyperparamIndices.length];
             System.arraycopy(_currentHyperparamIndices, 0, hyperParamIndicesCopy, 0, _currentHyperparamIndices.length);
@@ -439,6 +440,9 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
           }
           
           hyperparamIndices[i]++;
+          // Ensures that all hyper parameters required to have the same array dimension (grouped_params) have
+          // the same array dimension. If any do not, nextModelIndices is recursively called to proceed
+          // to the next point in the hyperspace.
           if(_search_criteria._grouped_parameters != null) {
             int grouped_params_array_len = -1;
             Set<String> grouped_params = new HashSet<>(Arrays.asList(_search_criteria._grouped_parameters));

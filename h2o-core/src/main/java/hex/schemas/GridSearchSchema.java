@@ -87,7 +87,6 @@ public class GridSearchSchema<G extends Grid<MP>,
       Properties p;
       try {
         m = JSONUtils.parse(parms.getProperty("search_criteria"));
-        //p = water.util.JSONUtils.parseToProperties(parms.getProperty("search_criteria"));
 
         if (! m.containsKey("strategy")) {
           throw new H2OIllegalArgumentException("search_criteria.strategy", "null");
