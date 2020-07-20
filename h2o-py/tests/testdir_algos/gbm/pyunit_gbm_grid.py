@@ -42,8 +42,6 @@ def iris_gbm_grid():
     total_grid_space.remove(combo)
 
 if __name__ == "__main__":
-  h2o.init(ip='192.168.1.5', port=54321, strict_version_check=False)
   pyunit_utils.standalone_test(iris_gbm_grid)
 else:
-  h2o.init(ip='192.168.1.5', port=54321, strict_version_check=False)
   iris_gbm_grid()
