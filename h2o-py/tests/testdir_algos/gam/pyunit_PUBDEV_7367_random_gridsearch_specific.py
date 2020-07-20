@@ -9,7 +9,7 @@ from h2o.estimators.gam import H2OGeneralizedAdditiveEstimator
 from h2o.grid.grid_search import H2OGridSearch
 
 # In this test, we check to make sure that a random discrete grid search on a GAM functions correctly.
-# The test searches over 5 parameters, alpha, lambda, scale, gam_columns, and num_knots.
+# The test searches over 3 parameters, scale, gam_columns, and num_knots.
 # The test then compares the results of the grid search models with the models we created
 # by manually searching over the hyperspace.
 # If the coefficients do not match or an incorrect number of models is generated, the test throws an assertion error.
@@ -19,13 +19,13 @@ class test_random_gam_gridsearch_specific:
     myX = []
     myY = []
     h2o_model = []
-    search_criteria = {'strategy': 'RandomDiscrete', "max_models": 12, "seed": 1}
-    hyper_parameters = {'scale': [[1, 1, 1], [2, 2, 2], [1, 1], [2, 2], [0.01], [0.05]],
-                        'gam_columns': [["C6", "C7", "C8"], ["C6", "C7"], ["C6"]],
-                        'num_knots': [[5, 5, 5], [6, 6, 6], [5, 5], [6, 6], [5], [6]]}
+    search_criteria = {'strategy': 'RandomDiscrete', "max_models": 4, "seed": 1}
+    hyper_parameters = {'scale': [[1, 1, 1], [2, 2, 2]],
+                        'gam_columns': [["C6", "C7", "C8"]],
+                        'num_knots': [[5, 5, 5], [6, 6, 6]]}
     manual_gam_models = []
     num_grid_models = 0
-    num_expected_models = 12
+    num_expected_models = 4
 
     def __init__(self):
         self.setup_data()
