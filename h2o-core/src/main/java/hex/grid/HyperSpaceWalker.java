@@ -274,6 +274,10 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
         }
       }
       
+      if(grouped_param_arrlens == null) {
+        return non_grouped_params_combos;
+      }
+      
       for (Map.Entry<Integer, Integer> entry : grouped_param_arrlens.entrySet()) {
         work += non_grouped_params_combos * entry.getValue();
       }
