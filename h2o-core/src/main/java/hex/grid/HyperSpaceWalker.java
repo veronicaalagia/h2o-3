@@ -224,11 +224,11 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
       return _paramsBuilderFactory;
     }
 
-    protected MP getModelParams(MP params, Object[] hyperParams) {
+    protected MP getModelParams(MP params, Object[] hyperParams, String[] hyperParamNames) {
       ModelParametersBuilderFactory.ModelParametersBuilder<MP>
               paramsBuilder = _paramsBuilderFactory.get(params);
-      for (int i = 0; i < _hyperParamNames.length; i++) {
-        String paramName = _hyperParamNames[i];
+      for (int i = 0; i < hyperParamNames.length; i++) {
+        String paramName = hyperParamNames[i];
         Object paramValue = hyperParams[i];
         if (paramName.equals("valid")) {  // change paramValue to key<Frame> for validation_frame
           paramName = "validation_frame";   // @#$, paramsSchema is still using validation_frame and training_frame
@@ -241,76 +241,67 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
 
     protected long computeMaxSizeOfHyperSpace() {
       long work = 0;
-      long non_grouped_params_combos = 1;
+      long free_param_combos = 1;
       
-      // Create hashmap of number of combinations for each array length of grouped parameters
-      Set<String> grouped_params = _search_criteria._grouped_parameters != null ?
-              new HashSet<>(Arrays.asList(_search_criteria._grouped_parameters)) : null;
-      Map<Integer, Integer> grouped_param_arrlens = null;
-      if(grouped_params != null) {
-        for (String param: grouped_params) {
-          Map<Integer, Integer> param_arrlen_frequencies = new HashMap<>();
-          if(_hyperParams.get(param) != null) {
-            for (Object param_vals: _hyperParams.get(param)) {
-              int param_arrlen = ((ArrayList) param_vals).toArray().length;
-              if(param_arrlen_frequencies.get(param_arrlen) != null) {
-                param_arrlen_frequencies.put(param_arrlen, param_arrlen_frequencies.get(param_arrlen) + 1);
-              } else {
-                param_arrlen_frequencies.put(param_arrlen, 1);
-              }
-            }
-            grouped_param_arrlens = multiplyHashMaps(grouped_param_arrlens, param_arrlen_frequencies);
+      if(_hyperParams.get("constraints") == null) {
+        for (Map.Entry<String, Object[]> p : _hyperParams.entrySet()) {
+          if (p.getValue() != null) {
+            work *= p.getValue().length;
           }
         }
+        return work;
       }
-      
-      // Get number of combinations for non grouped parameters
+
       for (Map.Entry<String, Object[]> p : _hyperParams.entrySet()) {
-        if(grouped_params != null && grouped_params.contains(p.getKey())) { continue; } 
-        else {
-          if (p.getValue() != null) {
-            non_grouped_params_combos *= p.getValue().length;
-          }  
+        if (p.getValue() != null && !p.getKey().equals("constraints")) {
+          free_param_combos *= p.getValue().length;
         }
       }
       
-      if(grouped_param_arrlens == null) {
-        return non_grouped_params_combos;
-      }
-      
-      for (Map.Entry<Integer, Integer> entry : grouped_param_arrlens.entrySet()) {
-        work += non_grouped_params_combos * entry.getValue();
+      for (int i = 0; i < _hyperParams.get("constraints").length; i++) {
+        long constrained_param_combos = 1;
+        Map<String, Object[]> constraints = (Map<String, Object[]>)_hyperParams.get("constraints")[i];
+        for (Map.Entry<String, Object[]> p : constraints.entrySet()) {
+          if (p.getValue() != null) {
+            constrained_param_combos *= ((ArrayList) (Object) p.getValue()).toArray().length;
+          }
+        }
+        work += constrained_param_combos * free_param_combos;
       }
       
       return work;
     }
 
-    protected Map<Integer, Integer> multiplyHashMaps(Map<Integer, Integer> m1, Map<Integer, Integer> m2) {
-      if(m1 == null) { return m2; }
-      Map<Integer, Integer> m = new HashMap<>();
-      for(Map.Entry<Integer, Integer> entry : m1.entrySet()) {
-        if(m2.get(entry.getKey()) != null) {
-          m.put(entry.getKey(), entry.getValue() * m2.get(entry.getKey()));
-        } else {
-          m.put(entry.getKey(), 0);
-        }
+    protected Map<String, Object[]> mergeHashMaps(Map<String, Object[]> m1, Map<String, Object[]> m2) {
+      if(m2 == null) { return m1; }
+      Map<String, Object[]> m = new HashMap<>();
+      
+      for(Map.Entry<String, Object[]> entry : m1.entrySet()) {
+        if(entry.getKey().equals("constraints")) { continue; }
+        m.put(entry.getKey(), entry.getValue());
       }
+      
+      for(Map.Entry<String, Object[]> entry : m2.entrySet()) {
+        m.put(entry.getKey(), ((ArrayList) (Object) entry.getValue()).toArray());
+      }
+      
       return m;
     }
     
     /** Given a list of indices for the hyperparameter values return an Object[] of the actual values. */
-    protected Object[] hypers(int[] hidx) {
-      Object[] hypers = new Object[_hyperParamNames.length];
+    protected Object[] hypers(Map<String, Object[]> hyperParams, String[] hyperParamNames, int[] hidx) {
+      Object[] hypers = new Object[hyperParamNames.length];
       for (int i = 0; i < hidx.length; i++) {
-        hypers[i] = _hyperParams.get(_hyperParamNames[i])[hidx[i]];
+        hypers[i] = hyperParams.get(hyperParamNames[i])[hidx[i]];
       }
       return hypers;
     }
 
-    protected int integerHash(int[] ar) {
-      Integer[] hashMe = new Integer[ar.length];
+    protected int integerHash(Map<String, Object[]> hyperParams, String[] hyperParamNames, int[] ar, int constraintNum) {
+      Integer[] hashMe = new Integer[ar.length + 1];
       for (int i = 0; i < ar.length; i++)
-        hashMe[i] = ar[i] * _hyperParams.get(_hyperParamNames[i]).length;
+        hashMe[i] = ar[i] * hyperParams.get(hyperParamNames[i]).length;
+      hashMe[ar.length] = constraintNum;
       return Arrays.deepHashCode(hashMe);
     }
 
@@ -318,6 +309,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
       // if a parameter is specified in both model parameter and hyper-parameter, this is only allowed if the
       // parameter value is set to be default.  Otherwise, an exception will be thrown.
       for (String key : _hyperParams.keySet()) {
+        if(key.equals("constraints")) { continue; }
         // Throw if the user passed an empty value list:
         Object[] values = _hyperParams.get(key);
         if (0 == values.length)
@@ -375,26 +367,35 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
         /** Hyper params permutation.
          */
         private int[] _currentHyperparamIndices = null;
+        private int _currentConstraint = -1;
+        private Map<String, Object[]> _currentHyperParams = _hyperParams;
+        private String[] _currentHyperParamNames = _hyperParamNames;
 
         @Override
         public MP nextModelParameters(Model previousModel) {
 
-          // First combination - all 0s, may not be valid, so we set
-          // first index to -1 and then call nextModelIndices to determine
-          // the first valid combination of indices
-          if (_currentHyperparamIndices == null) {
-            _currentHyperparamIndices = new int[_hyperParamNames.length];
-            _currentHyperparamIndices[0] = -1;
+          if (_hyperParams.get("constraints") != null && _currentConstraint == -1) {
+            _currentConstraint = 0;
+            _currentHyperParams = mergeHashMaps(_hyperParams, (Map<String, Object[]>) _hyperParams.get("constraints")[0]);
+            _currentHyperParamNames = _currentHyperParams.keySet().toArray(new String[0]);
           }
-          _currentHyperparamIndices = nextModelIndices(_currentHyperparamIndices);
+          
+          _currentHyperparamIndices = _currentHyperparamIndices == null ?
+                  new int[_currentHyperParamNames.length] : nextModelIndices(_currentHyperparamIndices);
+          
+          if(_currentConstraint != -1 && _currentConstraint < _hyperParams.get("constraints").length - 1 && _currentHyperparamIndices == null) {
+            _currentHyperParams = mergeHashMaps(_hyperParams, (Map<String, Object[]>) _hyperParams.get("constraints")[++_currentConstraint]);
+            _currentHyperParamNames = _currentHyperParams.keySet().toArray(new String[0]);
+            _currentHyperparamIndices = new int[_currentHyperParamNames.length];
+          }
 
           if (_currentHyperparamIndices != null) {
             // Fill array of hyper-values
-            Object[] hypers = hypers(_currentHyperparamIndices);
+            Object[] hypers = hypers(_currentHyperParams, _currentHyperParamNames, _currentHyperparamIndices);
             // Get clone of parameters
             MP commonModelParams = (MP) _params.clone();
             // Fill model parameters
-            MP params = getModelParams(commonModelParams, hypers);
+            MP params = getModelParams(commonModelParams, hypers, _currentHyperParamNames);
 
             return params;
           } else {
@@ -408,7 +409,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
           if (_currentHyperparamIndices != null) {
             int[] hyperParamIndicesCopy = new int[_currentHyperparamIndices.length];
             System.arraycopy(_currentHyperparamIndices, 0, hyperParamIndicesCopy, 0, _currentHyperparamIndices.length);
-            if (nextModelIndices(hyperParamIndicesCopy) == null) {
+            if (nextModelIndices(hyperParamIndicesCopy) == null && _currentConstraint == _hyperParams.get("constraints").length - 1) {
               return false;
             }
           }
@@ -419,7 +420,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
         @Override
         public void onModelFailure(Model failedModel, Consumer<Object[]> withFailedModelHyperParams) {
           // FIXME: when using parallel grid search, there's no good reason to think that the current hyperparam indices where the ones used for the failed model
-          withFailedModelHyperParams.accept(hypers(_currentHyperparamIndices));
+          withFailedModelHyperParams.accept(hypers(_currentHyperParams, _currentHyperParamNames, _currentHyperparamIndices));
         }
 
         /**
@@ -431,7 +432,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
           // Find the next parm to flip
           int i;
           for (i = 0; i < hyperparamIndices.length; i++) {
-            if (hyperparamIndices[i] + 1 < _hyperParams.get(_hyperParamNames[i]).length) {
+            if (hyperparamIndices[i] + 1 < _currentHyperParams.get(_currentHyperParamNames[i]).length) {
               break;
             }
           }
@@ -444,25 +445,6 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
           }
           
           hyperparamIndices[i]++;
-          // Ensures that all hyper parameters required to have the same array dimension (grouped_params) have
-          // the same array dimension. If any do not, nextModelIndices is recursively called to proceed
-          // to the next point in the hyperspace.
-          if(_search_criteria._grouped_parameters != null) {
-            int grouped_params_array_len = -1;
-            Set<String> grouped_params = new HashSet<>(Arrays.asList(_search_criteria._grouped_parameters));
-            for(int index = 0; index < hyperparamIndices.length; index++) {
-              if(grouped_params.contains(_hyperParamNames[index])) {
-                int param_index = hyperparamIndices[index];
-                int param_arrlen = ((ArrayList) _hyperParams.get(_hyperParamNames[index])[param_index]).toArray().length;
-                if(grouped_params_array_len != -1 && param_arrlen != grouped_params_array_len) {
-                   return nextModelIndices(hyperparamIndices);
-                } else {
-                  grouped_params_array_len = param_arrlen;
-                }
-              }
-            }
-          }
-          
           return hyperparamIndices;
         }
       }; // anonymous HyperSpaceIterator class
@@ -517,6 +499,10 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
         /** One-based count of the permutations we've visited, primarily used as an index into _visitedHyperparamIndices. */
         private int _currentPermutationNum = 0;
 
+        private int _currentConstraint = -1;
+        private Map<String, Object[]> _currentHyperParams = _hyperParams;
+        private String[] _currentHyperParamNames = _hyperParamNames;
+
         // TODO: override into a common subclass:
         @Override
         public MP nextModelParameters(Model previousModel) {
@@ -527,15 +513,15 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
 
           if (_currentHyperparamIndices != null) {
             _visitedPermutations.add(_currentHyperparamIndices);
-            _visitedPermutationHashes.add(integerHash(_currentHyperparamIndices));
+            _visitedPermutationHashes.add(integerHash(_currentHyperParams, _currentHyperParamNames, _currentHyperparamIndices, _currentConstraint));
             _currentPermutationNum++; // NOTE: 1-based counting
 
             // Fill array of hyper-values
-            Object[] hypers = hypers(_currentHyperparamIndices);
+            Object[] hypers = hypers(_currentHyperParams, _currentHyperParamNames, _currentHyperparamIndices);
             // Get clone of parameters
             MP commonModelParams = (MP) _params.clone();
             // Fill model parameters
-            MP params = getModelParams(commonModelParams, hypers);
+            MP params = getModelParams(commonModelParams, hypers, _currentHyperParamNames);
 
             // add max_runtime_secs in search criteria into params if applicable
             if (_search_criteria != null && _search_criteria.strategy() == Strategy.RandomDiscrete) {
@@ -567,7 +553,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
         public void onModelFailure(Model failedModel, Consumer<Object[]> withFailedModelHyperParams) {
           // FIXME: when using parallel grid search, there's no good reason to think that the current hyperparam indices where the ones used for the failed model
           _currentPermutationNum--;
-          withFailedModelHyperParams.accept(hypers(_currentHyperparamIndices));
+          withFailedModelHyperParams.accept(hypers(_currentHyperParams, _currentHyperParamNames, _currentHyperparamIndices));
         }
 
         /**
@@ -576,54 +562,27 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
          * criteria.
          */
         private int[] nextModelIndices() {
-          int[] hyperparamIndices =  new int[_hyperParamNames.length];
-          
-          Set<String> grouped_params = null;
-          int grouped_params_length = -1;
-          if(_search_criteria._grouped_parameters != null) {
-            grouped_params = new HashSet<>(Arrays.asList(_search_criteria._grouped_parameters));  
+          if(_hyperParams.get("constraints") != null) {
+            _currentConstraint = _random.nextInt(_hyperParams.get("constraints").length);
+            _currentHyperParams = mergeHashMaps(_hyperParams, (Map<String, Object[]>) _hyperParams.get("constraints")[_currentConstraint]);
+            _currentHyperParamNames = _currentHyperParams.keySet().toArray(new String[0]);
           }
           
+          int[] hyperparamIndices = new int[_currentHyperParamNames.length];
+          
           do {
-            grouped_params_length = -1;
-            for (int i = 0; i < _hyperParamNames.length; i++) {
-              if(grouped_params != null && grouped_params.contains(_hyperParamNames[i]) && grouped_params_length == -1) {
-                int index = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);
-                grouped_params_length = ((ArrayList) _hyperParams.get(_hyperParamNames[i])[index]).toArray().length;
-                hyperparamIndices[i] = index;
-              } else if(grouped_params != null && grouped_params.contains(_hyperParamNames[i]) && grouped_params_length != -1) {
-                hyperparamIndices[i] = nextGroupedParamIndex(grouped_params_length, _hyperParamNames[i], _hyperParams.get(_hyperParamNames[i]));
-                if(hyperparamIndices[i] == -1) {
-                  break;
-                }
-              } else {
-                hyperparamIndices[i] = _random.nextInt(_hyperParams.get(_hyperParamNames[i]).length);  
-              }
+            _currentConstraint = _random.nextInt(_hyperParams.get("constraints").length);
+            _currentHyperParams = mergeHashMaps(_hyperParams, (Map<String, Object[]>) _hyperParams.get("constraints")[_currentConstraint]);
+            _currentHyperParamNames = _currentHyperParams.keySet().toArray(new String[0]);
+            hyperparamIndices = new int[_currentHyperParamNames.length];
+            for (int i = 0; i < _currentHyperParamNames.length; i++) {
+              hyperparamIndices[i] = _random.nextInt(_currentHyperParams.get(_currentHyperParamNames[i]).length);
             }
             // check for aliases and loop if we've visited this combo before
-          } while (_visitedPermutationHashes.contains(integerHash(hyperparamIndices)) ||
-                  IntStream.of(hyperparamIndices).anyMatch(x -> x == -1));
+          } while (_visitedPermutationHashes.contains(integerHash(_currentHyperParams, _currentHyperParamNames, hyperparamIndices, _currentConstraint)));
           
           return hyperparamIndices;
         } // nextModel
-
-        /**
-         * Returns random index in the hyperspace of the grouped
-         * hyperparameter, param, subject to the constraint that the length of
-         * the random array chosen is equal to grouped_params_length, which is
-         * the length of the arrays of the other grouped parameters chosen.
-         * 
-         * @param grouped_params_length
-         * @param param
-         * @param param_values
-         * @return
-         */
-        private int nextGroupedParamIndex(int grouped_params_length, String param, Object[] param_values) {
-          int[] filtered_param_indices = IntStream.range(0, _hyperParams.get(param).length)
-                  .filter(i -> ((ArrayList<Integer>)(param_values[i])).size() == grouped_params_length).toArray();
-          if(filtered_param_indices.length == 0) { return -1; }
-          return filtered_param_indices[_random.nextInt(filtered_param_indices.length)];
-        }
 
       }; // anonymous HyperSpaceIterator class
     } // iterator()

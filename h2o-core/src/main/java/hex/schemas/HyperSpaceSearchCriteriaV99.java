@@ -19,14 +19,7 @@ public class HyperSpaceSearchCriteriaV99<I extends HyperSpaceSearchCriteria, S e
   @API(help = "Hyperparameter space search strategy.", required = true, valuesProvider = StrategyValuesProvider.class, direction = API.Direction.INOUT)
   public HyperSpaceSearchCriteria.Strategy strategy;
 
-  /**
-   * Array specifying the griddable hyper parameters required to have
-   * the same array dimension.
-   */
-  @API(help = "Grouped Parameters", required = false, direction = API.Direction.INOUT)
-  public String[] grouped_parameters;
-
-// TODO: add a factory which accepts a Strategy and calls the right constructor
+  // TODO: add a factory which accepts a Strategy and calls the right constructor
 
   /**
    * Search criteria for an exhaustive Cartesian hyperparameter search.
