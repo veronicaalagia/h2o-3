@@ -309,7 +309,6 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
       // if a parameter is specified in both model parameter and hyper-parameter, this is only allowed if the
       // parameter value is set to be default.  Otherwise, an exception will be thrown.
       for (String key : _hyperParams.keySet()) {
-        if(key.equals("constraints")) { continue; }
         // Throw if the user passed an empty value list:
         Object[] values = _hyperParams.get(key);
         if (0 == values.length)
@@ -317,33 +316,50 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
 
         if ("seed".equals(key) || "_seed".equals(key)) continue;  // initialized to the wall clock
 
-        // Ugh.  Java callers, like the JUnits or Sparkling Water users, use a leading _.  REST users don't.
-        String prefix = (key.startsWith("_") ? "" : "_");
-
-        // Throw if params has a non-default value which is not in the hyperParams map
-        Object defaultVal = PojoUtils.getFieldValue(_defaultParams, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
-        Object actualVal = PojoUtils.getFieldValue(_params, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
-
-        if (defaultVal != null && actualVal != null) {
-          // both are not set to null
-          if (defaultVal.getClass().isArray() &&
-                  // array
-                  !PojoUtils.arraysEquals(defaultVal, actualVal)) {
-            throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
-          } // array
-          if (!defaultVal.getClass().isArray() &&
-                  // ! array
-                  !defaultVal.equals(actualVal)) {
-            throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
-          } // ! array
-        } // both are set: defaultVal != null && actualVal != null
-
-        // defaultVal is null but actualVal is not, raise exception
-        if (defaultVal == null && !(actualVal == null)) {
-          // only actual is set
-          throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
+        if(key.equals("constraints")) {
+          for (int i = 0; i < _hyperParams.get("constraints").length; i++) {
+            Map<String, Object[]> constraints = (Map<String, Object[]>)_hyperParams.get("constraints")[i];
+            for (String constraintKey : constraints.keySet()) {
+              if(_hyperParams.get(constraintKey) != null) {
+                throw new H2OIllegalArgumentException("Grid search model parameter '" + constraintKey + "' is set in both the constraints and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
+              }
+              validateParamVals(constraintKey);
+            }
+          }
+        } else {
+          validateParamVals(key);  
         }
+        // Ugh.  Java callers, like the JUnits or Sparkling Water users, use a leading _.  REST users don't.
+
       } // for all keys
+    }
+    
+    private void validateParamVals(String key) {
+      String prefix = (key.startsWith("_") ? "" : "_");
+
+      // Throw if params has a non-default value which is not in the hyperParams map
+      Object defaultVal = PojoUtils.getFieldValue(_defaultParams, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
+      Object actualVal = PojoUtils.getFieldValue(_params, prefix + key, PojoUtils.FieldNaming.CONSISTENT);
+
+      if (defaultVal != null && actualVal != null) {
+        // both are not set to null
+        if (defaultVal.getClass().isArray() &&
+                // array
+                !PojoUtils.arraysEquals(defaultVal, actualVal)) {
+          throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
+        } // array
+        if (!defaultVal.getClass().isArray() &&
+                // ! array
+                !defaultVal.equals(actualVal)) {
+          throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
+        } // ! array
+      } // both are set: defaultVal != null && actualVal != null
+
+      // defaultVal is null but actualVal is not, raise exception
+      if (defaultVal == null && !(actualVal == null)) {
+        // only actual is set
+        throw new H2OIllegalArgumentException("Grid search model parameter '" + key + "' is set in both the model parameters and in the hyperparameters map.  This is ambiguous; set it in one place or the other, not both.");
+      }
     }
   }
 
