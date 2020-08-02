@@ -587,10 +587,12 @@ public interface HyperSpaceWalker<MP extends Model.Parameters, C extends HyperSp
           int[] hyperparamIndices = new int[_currentHyperParamNames.length];
           
           do {
-            _currentConstraint = _random.nextInt(_hyperParams.get("constraints").length);
-            _currentHyperParams = mergeHashMaps(_hyperParams, (Map<String, Object[]>) _hyperParams.get("constraints")[_currentConstraint]);
-            _currentHyperParamNames = _currentHyperParams.keySet().toArray(new String[0]);
-            hyperparamIndices = new int[_currentHyperParamNames.length];
+            if(_hyperParams.get("constraints") != null) {
+              _currentConstraint = _random.nextInt(_hyperParams.get("constraints").length);
+              _currentHyperParams = mergeHashMaps(_hyperParams, (Map<String, Object[]>) _hyperParams.get("constraints")[_currentConstraint]);
+              _currentHyperParamNames = _currentHyperParams.keySet().toArray(new String[0]);
+              hyperparamIndices = new int[_currentHyperParamNames.length];
+            }
             for (int i = 0; i < _currentHyperParamNames.length; i++) {
               hyperparamIndices[i] = _random.nextInt(_currentHyperParams.get(_currentHyperParamNames[i]).length);
             }
