@@ -9,10 +9,7 @@ import water.fvec.*;
 import water.parser.ParseDataset;
 import water.parser.ParseSetup;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
@@ -470,7 +467,7 @@ public class FrameUtils {
         if (_compressor != null) {
           os = _compressor.wrapOutputStream(os);
         }
-        written = copyCSVStream(is, os, firstChkIdx, BUFFER_SIZE);
+        written = copyCSVStream(is, os, firstChkIdx);
       } catch (IOException e) {
         throw new RuntimeException(e);
       } finally {
