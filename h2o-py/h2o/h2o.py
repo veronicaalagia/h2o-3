@@ -1466,7 +1466,7 @@ def load_model(path):
     return get_model(res["models"][0]["model_id"]["name"])
 
 
-def export_file(frame, path, force=False, sep=",", compression=None, parts=1):
+def export_file(frame, path, force=False, sep=",", compression=None, parts=1, parallel=False):
     """
     Export a given H2OFrame to a path on the machine this python session is currently connected to.
 
@@ -1480,6 +1480,8 @@ def export_file(frame, path, force=False, sep=",", compression=None, parts=1):
         specify your desired maximum number of part files. Path needs to be a directory
         when exporting to multiple files, also that directory must be empty.
         Default is ``parts = 1``, which is to export to a single file.
+    :param parallel: use parallel export to a single file (doesn't apply when num_parts != 1, 
+        creates temporary files in the destination directory).
 
     :examples:
 
@@ -1502,8 +1504,10 @@ def export_file(frame, path, force=False, sep=",", compression=None, parts=1):
     assert_is_type(force, bool)
     assert_is_type(parts, int)
     assert_is_type(compression, str, None)
+    assert_is_type(parallel, bool)
     H2OJob(api("POST /3/Frames/%s/export" % (frame.frame_id), 
-               data={"path": path, "num_parts": parts, "force": force, "compression": compression, "separator": ord(sep)}),
+               data={"path": path, "num_parts": parts, "parallel": parallel, 
+                     "force": force, "compression": compression, "separator": ord(sep)}),
            "Export File").poll()
 
 

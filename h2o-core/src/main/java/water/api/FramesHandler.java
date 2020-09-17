@@ -244,7 +244,8 @@ public class FramesHandler<I extends FramesHandler.Frames, S extends SchemaV3<I,
     Frame fr = getFromDKV("key", s.frame_id.key());
     Log.info("ExportFiles processing (" + s.path + ")");
     Frame.CSVStreamParams csvParms = new Frame.CSVStreamParams().setSeparator(s.separator);
-    s.job = new JobV3(Frame.export(fr, s.path, s.frame_id.key().toString(), s.force, s.num_parts, s.compression, csvParms));
+    s.job = new JobV3(Frame.export(fr, s.path, s.frame_id.key().toString(), s.force, s.num_parts, 
+            s.parallel, s.compression, csvParms));
     return s;
   }
 
